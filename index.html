@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>OpenCV.js</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/css/bootstrap.min.css"
+          integrity="sha384-PsH8R72JQ3SOdhVi3uxftmaW6Vc51MKb0q5P2rRUpPvrszuE4W1povHYgTpBfshb" crossorigin="anonymous">
+    <style type="text/css">
+        /* Start by setting display:none to make this hidden.
+       Then we position it in relation to the viewport window
+       with position:fixed. Width, height, top and left speak
+       for themselves. Background we set to 80% white with
+       our animation centered, and no-repeating */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            background: rgba(255, 255, 255, .8) url('http://i.stack.imgur.com/FhHRx.gif') 50% 50% no-repeat;
+        }
+
+        /* When the body has the loading class, we turn
+           the scrollbar off with overflow:hidden */
+        body.loading {
+            overflow: hidden;
+        }
+
+        /* Anytime the body has the loading class, our
+           modal element will be visible */
+        body.loading .modal {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="titlePart">
+        <h1>OpenCV - Rectangle Detection</h1>
+        <p>This website uses OpenCVJS to detect rectangles in any uploaded image.</p>
+    </div>
+    <div class="row">
+        <div class="colms">
+            <div class="card">
+                <div class="card-header">
+                    Original Image
+                </div>
+                <div class="card-block text-center">
+                    <img id="imageOriginal" alt="Upload" class="card-img-top"/>
+                </div>
+                <div class="card-footer text-muted">
+                    <input type="file" id="imageInput" name="file"/>
+                </div>
+            </div>
+        </div>
+        <div class="colms">
+            <div class="card">
+                <div class="card-header">
+                    Modified Image
+                </div>
+                <div class="card-block">
+                    <canvas id="imageCanvas"></canvas>
+                </div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item">
+                        <button type="button" id="rectButton" class="btn btn-primary">Rect Detection</button>
+                    </li>
+                </ul>
+                <div class="card-footer">
+                    <a href="#" id="button" class="card-link">Download Image</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal"></div>
+
+
+<script type="text/javascript">
+    document.body.classList.add("loading");
+
+    let imgElement = document.getElementById('imageOriginal');
+    let inputElement = document.getElementById('imageInput');
+    inputElement.addEventListener('change', (e) => {
+        imgElement.src = URL.createObjectURL(e.target.files[0]);
+    }, false);
+    let mat;
+
+    imgElement.onload = function () {
+        var scale = 2000 / inputElement.style.width;
+        let wid = inputElement.style.width * scale;
+        let hi = inputElement.style.height * scale;
+        inputElement.setAttribute("width", wid);
+        inputElement.setAttribute("height", hi);
+        mat = cv.imread(imgElement);
+        cv.imshow('imageCanvas', mat);
+    };
+
+    document.getElementById('rectButton').onclick = function () {
+        this.disabled = true;
+
+        let mat = cv.imread('imageCanvas');
+        let dst = mat.clone();
+        let gray = cv.cvtColor(dst, dst, cv.COLOR_RGBA2GRAY, 0);
+
+        let newImg = new cv.Mat();
+        let th = cv.threshold(dst, newImg, 50, 200, cv.THRESH_BINARY);
+        cv.imshow('imageCanvas', newImg);
+        let x = new cv.Mat();
+        cv.bitwise_not(newImg, x);
+
+
+        let M = cv.Mat.ones(8, 8, cv.CV_8U);
+        let T = cv.Mat.ones(3, 3, cv.CV_8U);
+        let anchor = new cv.Point(-1, -1);
+        cv.dilate(x, x, M, anchor, 1, cv.BORDER_CONSTANT, cv.morphologyDefaultBorderValue());
+
+        // cv.imshow('imageCanvas', x);
+        cv.bitwise_not(x, x);
+        cv.erode(x, x, T, anchor, 1, cv.BORDER_CONSTANT, cv.morphologyDefaultBorderValue());
+
+        // cv.imshow('imageCanvas', x);
+        let cnts = new cv.MatVector();
+        let hrs = new cv.Mat();
+        cv.findContours(x, cnts, hrs, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+
+        let rectangleColor = new cv.Scalar(68, 108, 1, 179);
+        let list = [];
+        // let tl_r, tl_c, br_r, br_c, tr_r, tr_c, bl_r, bl_c;
+        let img_ratio = (x.size().width * x.size().height);
+        console.log("img_ratio - " + img_ratio);
+        for (let j = 1; j < cnts.size(); ++j) {
+            let rect = cv.boundingRect(cnts.get(j));
+            let point1 = new cv.Point(rect.x, rect.y);
+            let point2 = new cv.Point(rect.x + rect.width, rect.y + rect.height);
+            let point3 = new cv.Point(rect.x + rect.width, rect.y);
+            let point4 = new cv.Point(rect.x, rect.y + rect.height);
+
+            let area = rect.width * rect.height;
+            let aspectRatio = area / (img_ratio);
+
+            if (aspectRatio > 0.02 && aspectRatio < 0.7) {
+                cv.rectangle(mat, point1, point2, rectangleColor, 2, cv.LINE_4, 0);
+                cv.putText(mat, "(width: " + rect.width + ", height: " + rect.height + ")", new cv.Point(point1.x - 15, point1.y - 15), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA
+                cv.circle(mat, point1, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
+                cv.putText(mat, "(" + point1.x + "," + point1.y + ")", new cv.Point(point1.x - 3, point1.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA
+                cv.circle(mat, point2, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
+                cv.putText(mat, "(" + point2.x + "," + point2.y + ")", new cv.Point(point2.x - 3, point2.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); // , 1, cv.CV_AA);
+                cv.circle(mat, point3, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
+                cv.putText(mat, "(" + point3.x + "," + point3.y + ")", new cv.Point(point3.x - 3, point3.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA);
+                cv.circle(mat, point4, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
+                cv.putText(mat, "(" + point4.x + "," + point4.y + ")", new cv.Point(point4.x - 3, point4.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA);
+            }
+        }
+        cv.imshow('imageCanvas', mat);
+        mat.delete();
+        dst.delete();
+
+
+        this.disabled = false;
+    };
+
+    document.getElementById('button').onclick = function () {
+        this.href = document.getElementById("imageCanvas").toDataURL();
+        this.download = "image.png";
+    };
+
+    function onOpenCvReady() {
+        document.body.classList.remove("loading");
+    }
+</script>
+<script async src="opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
+</body>
+</html>
