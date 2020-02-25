@@ -81,6 +81,7 @@
 <script type="text/javascript">
     document.body.classList.add("loading");
 
+    // getting elements into variable using getElementID
     let imgElement = document.getElementById('imageOriginal');
     let inputElement = document.getElementById('imageInput');
     inputElement.addEventListener('change', (e) => {
@@ -88,7 +89,9 @@
     }, false);
     let mat;
 
+    // Onload event to calculate area of image and read the image into Matrix
     imgElement.onload = function () {
+        // Resizing the image
         var scale = 2000 / inputElement.style.width;
         let wid = inputElement.style.width * scale;
         let hi = inputElement.style.height * scale;
@@ -98,39 +101,63 @@
         cv.imshow('imageCanvas', mat);
     };
 
+    // Onclick event  to perform Rectangle bounding and coordinate detection
     document.getElementById('rectButton').onclick = function () {
         this.disabled = true;
 
+        // Reading image into matrix
         let mat = cv.imread('imageCanvas');
-        let dst = mat.clone();
-        let gray = cv.cvtColor(dst, dst, cv.COLOR_RGBA2GRAY, 0);
 
+        // Cloning the original matrix in new matrix
+        let dst = mat.clone();
+
+        // Grayscaling the image
+        cv.cvtColor(dst, dst, cv.COLOR_RGBA2GRAY, 0);
         let newImg = new cv.Mat();
-        let th = cv.threshold(dst, newImg, 50, 200, cv.THRESH_BINARY);
-        cv.imshow('imageCanvas', newImg);
+
+        // Performing thresholding to get whole image exactly in black and white
+        let th = cv.threshold(dst, newImg, 100, 250, cv.THRESH_BINARY);
         let x = new cv.Mat();
+
+        // Inversing the image to get white borders to apply dilation
         cv.bitwise_not(newImg, x);
 
+        // display in between for debugging purpose
+        cv.imshow('imageCanvas', x);
 
-        let M = cv.Mat.ones(8, 8, cv.CV_8U);
-        let T = cv.Mat.ones(3, 3, cv.CV_8U);
+        // Creating a kernel to be used in dilation and erosion to provide values to the matrix
+        let T = cv.Mat.ones(0, 0, cv.CV_8U);
         let anchor = new cv.Point(-1, -1);
-        cv.dilate(x, x, M, anchor, 1, cv.BORDER_CONSTANT, cv.morphologyDefaultBorderValue());
 
-        // cv.imshow('imageCanvas', x);
+        // dilating the matrix to achieve smooth lines instead of broken ones and removing irregularities
+        cv.dilate(x, x, T, anchor, 1, cv.BORDER_CONSTANT, cv.morphologyDefaultBorderValue());
         cv.bitwise_not(x, x);
+
+        // eroding the image to matrix to provide thickness to the borders
         cv.erode(x, x, T, anchor, 1, cv.BORDER_CONSTANT, cv.morphologyDefaultBorderValue());
 
-        // cv.imshow('imageCanvas', x);
+        // display in between for debugging purpose
+        cv.imshow('imageCanvas', x);
+
+        // Creating empty contour matrix vector
         let cnts = new cv.MatVector();
-        let hrs = new cv.Mat();
-        cv.findContours(x, cnts, hrs, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+        let hierarchy = new cv.Mat();
+
+        // Finding and Assigning all contours to cnts
+        cv.findContours(x, cnts, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
 
         let rectangleColor = new cv.Scalar(68, 108, 1, 179);
         let list = [];
-        // let tl_r, tl_c, br_r, br_c, tr_r, tr_c, bl_r, bl_c;
         let img_ratio = (x.size().width * x.size().height);
         console.log("img_ratio - " + img_ratio);
+
+        // making bounding rectange to perform removal of double contouring of shape
+        for (let d = 1; d < cnts.size(); ++d) {
+            let maskRect = cv.boundingRect(cnts.get(d));
+            list.push(maskRect);
+        }
+
+        // making bounding rectange to identify corner points
         for (let j = 1; j < cnts.size(); ++j) {
             let rect = cv.boundingRect(cnts.get(j));
             let point1 = new cv.Point(rect.x, rect.y);
@@ -138,27 +165,44 @@
             let point3 = new cv.Point(rect.x + rect.width, rect.y);
             let point4 = new cv.Point(rect.x, rect.y + rect.height);
 
+            // getting area for making condition
             let area = rect.width * rect.height;
             let aspectRatio = area / (img_ratio);
 
-            if (aspectRatio > 0.02 && aspectRatio < 0.7) {
-                cv.rectangle(mat, point1, point2, rectangleColor, 2, cv.LINE_4, 0);
-                cv.putText(mat, "(width: " + rect.width + ", height: " + rect.height + ")", new cv.Point(point1.x - 15, point1.y - 15), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA
-                cv.circle(mat, point1, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
-                cv.putText(mat, "(" + point1.x + "," + point1.y + ")", new cv.Point(point1.x - 3, point1.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA
-                cv.circle(mat, point2, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
-                cv.putText(mat, "(" + point2.x + "," + point2.y + ")", new cv.Point(point2.x - 3, point2.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); // , 1, cv.CV_AA);
-                cv.circle(mat, point3, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
-                cv.putText(mat, "(" + point3.x + "," + point3.y + ")", new cv.Point(point3.x - 3, point3.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA);
-                cv.circle(mat, point4, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
-                cv.putText(mat, "(" + point4.x + "," + point4.y + ")", new cv.Point(point4.x - 3, point4.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA);
+            // exclude all the rectangles out of a certain range
+            if (aspectRatio < 0.005 || aspectRatio > 0.85) {
+                continue;
+            }
+
+            // Attempt to perform nonMaxSuppression - Not working
+            for (let y = 0; y < list.length; ++y) {
+                // Attempted condition for exclusion of inner contours
+                if (!((point1.x > list[y].x && point1.y > list[y].y) && (point2.x < (list[y].x + list[y].width) && point2.y < list[y].y + list[y].height)
+                    && (point3.x < list[y].x + list[y].width && point1.y > list[y].y) && (point4.x > list[y].x && point1.y < list[y].y + list[y].height)
+                )) {
+                    // writing into image the rectangles by giving points and color
+                    let rct = cv.rectangle(mat, point1, point2, rectangleColor, 2, cv.LINE_4, 0);
+
+                    // writing text over image
+                    cv.putText(mat, "(width: " + rect.width + ", height: " + rect.height + ")", new cv.Point(point1.x - 15, point1.y - 15), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA
+
+                    // making circles on the corners
+                    cv.circle(mat, point1, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
+                    cv.putText(mat, "(" + point1.x + "," + point1.y + ")", new cv.Point(point1.x - 3, point1.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA
+                    cv.circle(mat, point2, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
+                    cv.putText(mat, "(" + point2.x + "," + point2.y + ")", new cv.Point(point2.x - 3, point2.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); // , 1, cv.CV_AA);
+                    cv.circle(mat, point3, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
+                    cv.putText(mat, "(" + point3.x + "," + point3.y + ")", new cv.Point(point3.x - 3, point3.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA);
+                    cv.circle(mat, point4, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
+                    cv.putText(mat, "(" + point4.x + "," + point4.y + ")", new cv.Point(point4.x - 3, point4.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA);
+                }
             }
         }
+
+        // displaying the image on html page
         cv.imshow('imageCanvas', mat);
         mat.delete();
         dst.delete();
-
-
         this.disabled = false;
     };
 
@@ -170,6 +214,7 @@
     function onOpenCvReady() {
         document.body.classList.remove("loading");
     }
+
 </script>
 <script async src="opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
 </body>
