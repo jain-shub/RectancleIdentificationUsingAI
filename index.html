@@ -116,7 +116,7 @@
         let newImg = new cv.Mat();
 
         // Performing thresholding to get whole image exactly in black and white
-        let th = cv.threshold(dst, newImg, 100, 250, cv.THRESH_BINARY);
+        let th = cv.threshold(dst, newImg, 100, 255, cv.THRESH_BINARY);
         let x = new cv.Mat();
 
         // Inversing the image to get white borders to apply dilation
@@ -146,19 +146,23 @@
         // Finding and Assigning all contours to cnts
         cv.findContours(x, cnts, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
 
+        let poly = new cv.MatVector();
+        let tmp = new cv.Mat();
+
+        for (let i = 0; i < cnts.size(); ++i) {
+            let peri = 0.01 * cv.arcLength(cnts.get(i), true);
+            let cnt = cnts.get(i);
+            cv.approxPolyDP(cnt, tmp, peri, true);
+            poly.push_back(tmp);
+        }
         let rectangleColor = new cv.Scalar(68, 108, 1, 179);
         let list = [];
         let img_ratio = (x.size().width * x.size().height);
-        console.log("img_ratio - " + img_ratio);
-
-        // making bounding rectange to perform removal of double contouring of shape
-        for (let d = 1; d < cnts.size(); ++d) {
-            let maskRect = cv.boundingRect(cnts.get(d));
-            list.push(maskRect);
-        }
+        // console.log("img_ratio - " + img_ratio);
 
         // making bounding rectange to identify corner points
-        for (let j = 1; j < cnts.size(); ++j) {
+        for (let j = 1; j < poly.size(); ++j) {
+            let thisCntArea = cv.contourArea(poly.get(j));
             let rect = cv.boundingRect(cnts.get(j));
             let point1 = new cv.Point(rect.x, rect.y);
             let point2 = new cv.Point(rect.x + rect.width, rect.y + rect.height);
@@ -167,36 +171,30 @@
 
             // getting area for making condition
             let area = rect.width * rect.height;
-            let aspectRatio = area / (img_ratio);
+            let areaRatio = area / (img_ratio);
+            let isRect = thisCntArea / area;
 
+            console.log(isRect);
             // exclude all the rectangles out of a certain range
-            if (aspectRatio < 0.005 || aspectRatio > 0.85) {
+            if (areaRatio<0.0004 || areaRatio>0.90 || isRect<0.80) {
                 continue;
             }
 
-            // Attempt to perform nonMaxSuppression - Not working
-            for (let y = 0; y < list.length; ++y) {
-                // Attempted condition for exclusion of inner contours
-                if (!((point1.x > list[y].x && point1.y > list[y].y) && (point2.x < (list[y].x + list[y].width) && point2.y < list[y].y + list[y].height)
-                    && (point3.x < list[y].x + list[y].width && point1.y > list[y].y) && (point4.x > list[y].x && point1.y < list[y].y + list[y].height)
-                )) {
-                    // writing into image the rectangles by giving points and color
-                    let rct = cv.rectangle(mat, point1, point2, rectangleColor, 2, cv.LINE_4, 0);
+            // writing into image the rectangles by giving points and color
+            let rct = cv.rectangle(mat, point1, point2, rectangleColor, 2, cv.LINE_4, 0);
 
-                    // writing text over image
-                    cv.putText(mat, "(width: " + rect.width + ", height: " + rect.height + ")", new cv.Point(point1.x - 15, point1.y - 15), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA
+            // writing text over image
+            cv.putText(mat, "(width: " + rect.width + ", height: " + rect.height + ")", new cv.Point(point1.x - 15, point1.y - 15), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA
 
-                    // making circles on the corners
-                    cv.circle(mat, point1, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
-                    cv.putText(mat, "(" + point1.x + "," + point1.y + ")", new cv.Point(point1.x - 3, point1.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA
-                    cv.circle(mat, point2, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
-                    cv.putText(mat, "(" + point2.x + "," + point2.y + ")", new cv.Point(point2.x - 3, point2.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); // , 1, cv.CV_AA);
-                    cv.circle(mat, point3, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
-                    cv.putText(mat, "(" + point3.x + "," + point3.y + ")", new cv.Point(point3.x - 3, point3.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA);
-                    cv.circle(mat, point4, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
-                    cv.putText(mat, "(" + point4.x + "," + point4.y + ")", new cv.Point(point4.x - 3, point4.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA);
-                }
-            }
+            // making circles on the corners
+            cv.circle(mat, point1, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
+            cv.putText(mat, "(" + point1.x + "," + point1.y + ")", new cv.Point(point1.x - 3, point1.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA
+            cv.circle(mat, point2, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
+            cv.putText(mat, "(" + point2.x + "," + point2.y + ")", new cv.Point(point2.x - 3, point2.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); // , 1, cv.CV_AA);
+            cv.circle(mat, point3, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
+            cv.putText(mat, "(" + point3.x + "," + point3.y + ")", new cv.Point(point3.x - 3, point3.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA);
+            cv.circle(mat, point4, 10, new cv.Scalar(35, 0, 203, 167), 1, cv.LINE_4, 0);
+            cv.putText(mat, "(" + point4.x + "," + point4.y + ")", new cv.Point(point4.x - 3, point4.y - 3), cv.FONT_HERSHEY_COMPLEX_SMALL, 0.8, new cv.Scalar(255, 0, 0, 255)); //, 1, cv.CV_AA);
         }
 
         // displaying the image on html page
